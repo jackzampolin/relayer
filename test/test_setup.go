@@ -139,6 +139,7 @@ func spinUpTestContainer(t *testing.T, rchan chan<- *dockertest.Resource,
 		PortBindings: map[dc.Port][]dc.PortBinding{
 			dc.Port(tc.t.rpcPort): {{HostPort: c.GetRPCPort()}},
 		},
+		Mounts: []string{"./setup:/etc"},
 	}
 
 	// err = removeTestContainer(pool, containerName)

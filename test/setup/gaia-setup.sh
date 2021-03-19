@@ -18,6 +18,7 @@ fi
 # Build genesis file incl account for passed address
 coins="10000000000stake,100000000000samoleans"
 gaiad init --chain-id $CHAINID $CHAINID
+cp ~/etc/priv_validator_key.json ~/.gaia/config/priv_validator_key.json
 gaiad keys add validator --keyring-backend="test"
 gaiad add-genesis-account $(gaiad keys show validator -a --keyring-backend="test") $coins
 gaiad add-genesis-account $GENACCT $coins
