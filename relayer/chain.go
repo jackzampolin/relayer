@@ -132,13 +132,13 @@ func ValidateChannelParams(src, dst *Chain) error {
 }
 
 // ListenRPCEmitJSON listens for tx and block events from a chain and outputs them as JSON to stdout
-func (c *Chain) ListenRPCEmitJSON(ubdtime time.Time) func() {
+func (c *Chain) ListenRPCEmitJSON(ubdtime time.Time, recovery sdk.AccAddress, amount sdk.Coin) func() {
 	doneChan := make(chan struct{})
-	go c.listenLoop(doneChan, ubdtime)
+	go c.listenLoop(doneChan, ubdtime, recovery, amount)
 	return func() { doneChan <- struct{}{} }
 }
 
-func (c *Chain) listenLoop(doneChan chan struct{}, ubdtime time.Time) {
+func (c *Chain) listenLoop(doneChan chan struct{}, ubdtime time.Time, recovery sdk.AccAddress, amount sdk.Coin) {
 	// Subscribe to source chain
 	if err := c.Start(); err != nil {
 		c.Error(err)

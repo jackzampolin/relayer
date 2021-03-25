@@ -64,10 +64,10 @@ $ %s development genesis ibc-2`, appName, appName, appName)),
 // recoverCmd represents the listen command
 func recoverCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "recover-funds [chain-id] [time]",
+		Use:     "recover-funds [chain-id] [time] [recovery-address] [amount]",
 		Aliases: []string{"l"},
 		Short:   "attempt to recover funds from a key that is also controlled by an attacker",
-		Args:    cobra.ExactArgs(2),
+		Args:    cobra.ExactArgs(4),
 		Example: strings.TrimSpace(fmt.Sprintf(`
 $ %s dev listen ibc-0 --data --no-tx
 $ %s dev l ibc-1 --no-block
@@ -88,9 +88,19 @@ $ %s development listen ibc-2 --no-tx`, appName, appName, appName)),
 				return fmt.Errorf("key not configured")
 			}
 
+			recovery, err := sdk.AccAddressFromBech32(args[2])
+			if err != nil {
+				return err
+			}
+
+			amount, err := sdk.ParseCoinNormalized(args[3])
+			if err != nil {
+				return err
+			}
+
 			fmt.Printf("Attempting to recover funds from address(%s)...\n", addr.String())
 
-			done := c.ListenRPCEmitJSON(ubdtime)
+			done := c.ListenRPCEmitJSON(ubdtime, recovery, amount)
 			trapSignal(done)
 
 			return nil
