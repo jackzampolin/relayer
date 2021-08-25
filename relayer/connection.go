@@ -32,7 +32,7 @@ func (c *Chain) CreateOpenConnections(dst *Chain, maxRetries uint64, to time.Dur
 		// debug logging, log created connection and break
 		case success && lastStep:
 			if c.debug {
-				srcH, dstH, err := GetLatestLightHeights(c, dst)
+				srcH, dstH, err := QueryLatestHeights(c, dst)
 				if err != nil {
 					return modified, err
 				}
@@ -75,10 +75,10 @@ func (c *Chain) CreateOpenConnections(dst *Chain, maxRetries uint64, to time.Dur
 // file. The booleans return indicate if the message was successfully
 // executed and if this was the last handshake step.
 func ExecuteConnectionStep(src, dst *Chain) (success, last, modified bool, err error) {
-	if _, _, err := UpdateLightClients(src, dst); err != nil {
+	srch, dsth, err := QueryLatestHeights(src, dst)
+	if err != nil {
 		return false, false, false, err
 	}
-
 	// TODO: add back retries due to commit delay/update
 	// get headers to update light clients on chain
 	// if either identifier is missing, an existing connection that matches the required fields
@@ -94,8 +94,7 @@ func ExecuteConnectionStep(src, dst *Chain) (success, last, modified bool, err e
 	}
 
 	// Query Connection data from src and dst
-	srcConn, dstConn, err := QueryConnectionPair(src, dst, int64(src.MustGetLatestLightHeight())-1,
-		int64(dst.MustGetLatestLightHeight()-1))
+	srcConn, dstConn, err := QueryConnectionPair(src, dst, srch-1, dsth-1)
 	if err != nil {
 		return false, false, false, err
 	}
@@ -211,9 +210,8 @@ func InitializeConnection(src, dst *Chain) (success, modified bool, err error) {
 	// OpenInit on source
 	// Neither connection has been initialized
 	case src.PathEnd.ConnectionID == "" && dst.PathEnd.ConnectionID == "":
-		//nolint:staticcheck
 		if src.debug {
-			// TODO: log that we are attempting to create new connection ends
+			src.logOpenInit(dst, "connection")
 		}
 
 		connectionID, found := FindMatchingConnection(src, dst)
@@ -235,7 +233,10 @@ func InitializeConnection(src, dst *Chain) (success, modified bool, err error) {
 			if err != nil {
 				return false, false, err
 			}
+		} else if src.debug {
+			src.logIdentifierExists(dst, "connection end", connectionID)
 		}
+
 		src.PathEnd.ConnectionID = connectionID
 
 		return true, true, nil
@@ -243,9 +244,8 @@ func InitializeConnection(src, dst *Chain) (success, modified bool, err error) {
 	// OpenTry on source
 	// source connection does not exist, but counterparty connection exists
 	case src.PathEnd.ConnectionID == "" && dst.PathEnd.ConnectionID != "":
-		//nolint:staticcheck
 		if src.debug {
-			// TODO: update logging
+			src.logOpenTry(dst, "connection")
 		}
 
 		connectionID, found := FindMatchingConnection(src, dst)
@@ -266,7 +266,10 @@ func InitializeConnection(src, dst *Chain) (success, modified bool, err error) {
 			if err != nil {
 				return false, false, err
 			}
+		} else if src.debug {
+			src.logIdentifierExists(dst, "connection end", connectionID)
 		}
+
 		src.PathEnd.ConnectionID = connectionID
 
 		return true, true, nil
@@ -274,9 +277,8 @@ func InitializeConnection(src, dst *Chain) (success, modified bool, err error) {
 	// OpenTry on counterparty
 	// source connection exists, but counterparty connection does not exist
 	case src.PathEnd.ConnectionID != "" && dst.PathEnd.ConnectionID == "":
-		//nolint:staticcheck
 		if dst.debug {
-			// TODO: update logging
+			dst.logOpenTry(src, "connection")
 		}
 
 		connectionID, found := FindMatchingConnection(dst, src)
@@ -297,7 +299,10 @@ func InitializeConnection(src, dst *Chain) (success, modified bool, err error) {
 			if err != nil {
 				return false, false, err
 			}
+		} else if dst.debug {
+			dst.logIdentifierExists(src, "connection end", connectionID)
 		}
+
 		dst.PathEnd.ConnectionID = connectionID
 
 		return true, true, nil

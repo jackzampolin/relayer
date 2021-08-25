@@ -1,6 +1,7 @@
 package relayer
 
 import (
+	"context"
 	"fmt"
 
 	clienttypes "github.com/cosmos/cosmos-sdk/x/ibc/core/02-client/types"
@@ -14,11 +15,18 @@ import (
 // and returns an IBC Update Header which can be used to create an on-chain
 // light client on counterparty chain.
 func (c *Chain) GetIBCCreateClientHeader() (*tmclient.Header, error) {
-	lightBlock, err := c.UpdateLightClient()
+	h, err := c.QueryLatestHeight()
 	if err != nil {
 		return nil, err
 	}
+	return c.GetLightSignedHeaderAtHeight(h)
+}
 
+func (c *Chain) GetLightSignedHeaderAtHeight(h int64) (*tmclient.Header, error) {
+	lightBlock, err := c.Provider.LightBlock(context.Background(), h)
+	if err != nil {
+		return nil, err
+	}
 	protoVal, err := tmtypes.NewValidatorSet(lightBlock.ValidatorSet.Validators).ToProto()
 	if err != nil {
 		return nil, err
@@ -96,20 +104,18 @@ func (c *Chain) InjectTrustedFields(dst *Chain, header *tmclient.Header) (*tmcli
 
 	// retrieve counterparty client from src chain
 	// this is the client that will updated
-	counterpartyClientRes, err := dst.QueryClientState(0)
+	cs, err := dst.QueryClientState(0)
 	if err != nil {
 		return nil, err
-	}
-	cs, err := clienttypes.UnpackClientState(counterpartyClientRes.ClientState)
-	if err != nil {
-		panic(err)
 	}
 
 	// inject TrustedHeight as latest height stored on counterparty client
 	h.TrustedHeight = cs.GetLatestHeight().(clienttypes.Height)
 
-	// query TrustedValidators at Trusted Height from srcChain
-	trustedHeader, err := c.GetLightSignedHeaderAtHeight(int64(h.TrustedHeight.RevisionHeight))
+	// NOTE: We need to get validators from the source chain at height: trustedHeight+1
+	// since the last trusted validators for a header at height h is the NextValidators
+	// at h+1 committed to in header h by NextValidatorsHash
+	trustedHeader, err := c.GetLightSignedHeaderAtHeight(int64(h.TrustedHeight.RevisionHeight) + 1)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to get trusted header, please ensure header at the height %d has not been pruned by the connected node: %w",
@@ -123,10 +129,10 @@ func (c *Chain) InjectTrustedFields(dst *Chain, header *tmclient.Header) (*tmcli
 }
 
 // MustGetHeight takes the height inteface and returns the actual height
-func MustGetHeight(h ibcexported.Height) uint64 {
+func MustGetHeight(h ibcexported.Height) clienttypes.Height {
 	height, ok := h.(clienttypes.Height)
 	if !ok {
-		panic("height is not an instance of height! wtf")
+		panic("height is not an instance of height!")
 	}
-	return height.GetRevisionHeight()
+	return height
 }

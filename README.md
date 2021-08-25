@@ -36,7 +36,6 @@ wanting to build their [IBC](https://ibcprotocol.org/)-compliant relayer.
   - [Compatibility Table](#compatibility-table)
   - [Testnet](#testnet)
   - [Demo](#demo)
-  - [Setting up Developer Environment](#setting-up-developer-environment)
   - [Security Notice](#security-notice)
   - [Code of Conduct](#code-of-conduct)
 
@@ -45,7 +44,14 @@ wanting to build their [IBC](https://ibcprotocol.org/)-compliant relayer.
 To setup and start the IBC relayer between two IBC-enabled networks, the following
 steps are typically performed:
 
-1. Install the latest release.
+1. Install the latest release via github as follows or by downloding built binaries on the [releases page](https://github.com/cosmos/relayer/releases).
+
+  ```
+  $ git clone git@github.com:cosmos/relayer.git
+  $ git checkout v0.9.3
+  $ cd relayer && make install
+  ```
+
 2. Initialize the relayer's configuration.
 
    ```shell
@@ -107,8 +113,8 @@ steps are typically performed:
    information and initialize the light clients.
 
    ```shell
-   $ rly lite init chain-a -f
-   $ rly lite init chain-b -f
+   $ rly light init chain-a -f
+   $ rly light init chain-b -f
    ```
 
 9. Next, we generate a new path representing a client, connection, channel and a
@@ -152,7 +158,7 @@ The relayer currently cannot:
 
 A `path` represents an abstraction between two IBC-connected networks. Specifically,
 the `path` abstraction contains metadata about a source chain, a destination
-chain and a relaying strategy between thw two networks. The metadata for both
+chain and a relaying strategy between the two networks. The metadata for both
 the source and destination networks contains the following:
 
 - `chain-id`: The chain ID of the network.
@@ -262,27 +268,6 @@ $ rly q bal ibc-1
 # NOTE: you will see the stake balances decreasing on each chain. This is to pay for fees
 # You can change the amount of fees you are paying on each chain in the configuration.
 ```
-
-## Setting up Developer Environment
-
-Working with the relayer can frequently involve working with local development
-branches of your desired applications/networks, e.g. `gaia`, `akash`, in addition
-to `cosmos-sdk` and the `relayer`.
-
-To setup your environment to point at the local versions of the code and reduce
-the amount of time in your read-eval-print loops try the following:
-
-1. Set `replace github.com/cosmos/cosmos-sdk => /path/to/local/github.com/comsos/cosmos-sdk`
-   at the end of the `go.mod` files for the `relayer` and your network/application,
-   e.g. `gaia`. This will force building from the local version of the `cosmos-sdk`
-   when running the `./dev-env` script.
-2. After `./dev-env` has run, you can use `go run main.go` for any relayer
-   commands you are working on. This allows you make changes and immediately test
-   them as long as there are no server side changes.
-3. If you make changes in `cosmos-sdk` that need to be reflected server-side,
-   be sure to re-run `./two-chainz`.
-4. If you need to work off of a `gaia` branch other than `master`, change the
-   branch name at the top of the `./two-chainz` script.
 
 ## Security Notice
 

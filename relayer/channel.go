@@ -35,7 +35,7 @@ func (c *Chain) CreateOpenChannels(dst *Chain, maxRetries uint64, to time.Durati
 		case success && lastStep:
 
 			if c.debug {
-				srch, dsth, err := GetLatestLightHeights(c, dst)
+				srch, dsth, err := QueryLatestHeights(c, dst)
 				if err != nil {
 					return modified, err
 				}
@@ -78,7 +78,8 @@ func (c *Chain) CreateOpenChannels(dst *Chain, maxRetries uint64, to time.Durati
 // file. The booleans return indicate if the message was successfully
 // executed and if this was the last handshake step.
 func ExecuteChannelStep(src, dst *Chain) (success, last, modified bool, err error) {
-	if _, _, err := UpdateLightClients(src, dst); err != nil {
+	srch, dsth, err := QueryLatestHeights(src, dst)
+	if err != nil {
 		return false, false, false, err
 	}
 
@@ -94,8 +95,7 @@ func ExecuteChannelStep(src, dst *Chain) (success, last, modified bool, err erro
 	}
 
 	// Query Channel data from src and dst
-	srcChan, dstChan, err := QueryChannelPair(src, dst, int64(src.MustGetLatestLightHeight())-1,
-		int64(dst.MustGetLatestLightHeight()-1))
+	srcChan, dstChan, err := QueryChannelPair(src, dst, srch-1, dsth-1)
 	if err != nil {
 		return false, false, false, err
 	}
@@ -211,9 +211,8 @@ func InitializeChannel(src, dst *Chain) (success, modified bool, err error) {
 	// OpenInit on source
 	// Neither channel has been initialized
 	case src.PathEnd.ChannelID == "" && dst.PathEnd.ChannelID == "":
-		//nolint:staticcheck
 		if src.debug {
-			// TODO: log that we are attempting to create new channel ends
+			src.logOpenInit(dst, "channel")
 		}
 
 		channelID, found := FindMatchingChannel(src, dst)
@@ -234,7 +233,10 @@ func InitializeChannel(src, dst *Chain) (success, modified bool, err error) {
 			if err != nil {
 				return false, false, err
 			}
+		} else if src.debug {
+			src.logIdentifierExists(dst, "channel end", channelID)
 		}
+
 		src.PathEnd.ChannelID = channelID
 
 		return true, true, nil
@@ -242,9 +244,8 @@ func InitializeChannel(src, dst *Chain) (success, modified bool, err error) {
 	// OpenTry on source
 	// source channel does not exist, but counterparty channel exists
 	case src.PathEnd.ChannelID == "" && dst.PathEnd.ChannelID != "":
-		//nolint:staticcheck
 		if src.debug {
-			// TODO: update logging
+			src.logOpenTry(dst, "channel")
 		}
 
 		channelID, found := FindMatchingChannel(src, dst)
@@ -266,7 +267,10 @@ func InitializeChannel(src, dst *Chain) (success, modified bool, err error) {
 			if err != nil {
 				return false, false, err
 			}
+		} else if src.debug {
+			src.logIdentifierExists(dst, "channel end", channelID)
 		}
+
 		src.PathEnd.ChannelID = channelID
 
 		return true, true, nil
@@ -274,9 +278,8 @@ func InitializeChannel(src, dst *Chain) (success, modified bool, err error) {
 	// OpenTry on counterparty
 	// source channel exists, but counterparty channel does not exist
 	case src.PathEnd.ChannelID != "" && dst.PathEnd.ChannelID == "":
-		//nolint:staticcheck
 		if dst.debug {
-			// TODO: update logging
+			dst.logOpenTry(src, "channel")
 		}
 
 		channelID, found := FindMatchingChannel(dst, src)
@@ -298,7 +301,10 @@ func InitializeChannel(src, dst *Chain) (success, modified bool, err error) {
 			if err != nil {
 				return false, false, err
 			}
+		} else if dst.debug {
+			dst.logIdentifierExists(src, "channel end", channelID)
 		}
+
 		dst.PathEnd.ChannelID = channelID
 
 		return true, true, nil
@@ -344,7 +350,8 @@ func (c *Chain) CloseChannel(dst *Chain, to time.Duration) error {
 // identifiers between chains src and dst. If the closing handshake hasn't started, then CloseChannelStep
 // will begin the handshake on the src chain
 func (c *Chain) CloseChannelStep(dst *Chain) (*RelayMsgs, error) {
-	if _, _, err := UpdateLightClients(c, dst); err != nil {
+	srch, dsth, err := QueryLatestHeights(c, dst)
+	if err != nil {
 		return nil, err
 	}
 
@@ -353,9 +360,7 @@ func (c *Chain) CloseChannelStep(dst *Chain) (*RelayMsgs, error) {
 		return nil, err
 	}
 
-	srcChan, dstChan, err := QueryChannelPair(c, dst,
-		int64(c.MustGetLatestLightHeight())-1,
-		int64(dst.MustGetLatestLightHeight())-1)
+	srcChan, dstChan, err := QueryChannelPair(c, dst, srch-1, dsth-1)
 	if err != nil {
 		return nil, err
 	}

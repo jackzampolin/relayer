@@ -1,14 +1,14 @@
 VERSION := $(shell echo $(shell git describe --tags) | sed 's/^v//')
 COMMIT  := $(shell git log -1 --format='%H')
 SDKCOMMIT := $(shell go list -m -u -f '{{.Version}}' github.com/cosmos/cosmos-sdk)
-GAIA_VERSION := v4.1.0
-AKASH_VERSION := v0.10.2
-WASMD_VERSION := v0.14.1
+GAIA_VERSION := v5.0.4
+AKASH_VERSION := v0.12.1
+WASMD_VERSION := v0.16.0
 
 GOPATH := $(shell go env GOPATH)
 GOBIN := $(GOPATH)/bin
 
-all: ci-lint install
+all: lint install
 
 ###############################################################################
 # Build / Install
@@ -45,9 +45,23 @@ install: go.sum
 	@echo "installing rly binary..."
 	@go build -mod=readonly $(BUILD_FLAGS) -o $(GOBIN)/rly main.go
 
+build-gaia-docker:
+	docker build -t cosmos/gaia:$(GAIA_VERSION) --build-arg VERSION=$(GAIA_VERSION) -f ./docker/gaiad/Dockerfile .
+
+build-akash-docker:
+	docker build -t ovrclk/akash:$(AKASH_VERSION) --build-arg VERSION=$(AKASH_VERSION) -f ./docker/akash/Dockerfile .
 ###############################################################################
 # Tests / CI
 ###############################################################################
+
+two-chains:
+	@docker-compose -f ./two-chains/docker-compose.yaml down
+	@rm -fr ./two-chains/ibc-* ./two-chains/.relayer ./two-chains/rly.log
+	@docker-compose -f ./two-chains/docker-compose.yaml up -d
+	@while ! curl localhost:26657 &> /dev/null; do sleep 1; done
+	@while ! curl localhost:26667 &> /dev/null; do sleep 1; done
+	@cd ./two-chains && sh relayer-setup && cd ..
+
 test:
 	@TEST_DEBUG=true go test -mod=readonly -v ./test/...
 
@@ -65,8 +79,6 @@ lint:
 	@golangci-lint run
 	@find . -name '*.go' -type f -not -path "*.git*" | xargs gofmt -d -s
 	@go mod verify
-
-.PHONY: install build lint coverage clean
 
 ###############################################################################
 # Chain Code Downloads
@@ -95,6 +107,8 @@ get-wasmd:
 build-wasmd:
 	@./scripts/build-wasmd
 
+build-chains: build-akash build-gaia build-wasmd
+
 delete-chains: 
 	@echo "Removing the ./chain-code/ directory..."
 	@rm -rf ./chain-code
@@ -104,3 +118,5 @@ check-swagger:
 
 update-swagger-docs: check-swagger
 	swagger generate spec -o ./docs/swagger-ui/swagger.yaml
+
+.PHONY: two-chains test install build lint coverage clean

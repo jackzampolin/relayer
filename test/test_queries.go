@@ -19,13 +19,13 @@ func testClientPair(t *testing.T, src, dst *ry.Chain) {
 
 // testClient queries client for existence of dst on src
 func testClient(t *testing.T, src, dst *ry.Chain) {
-	srch, err := src.GetLatestLightHeight()
+	srch, err := src.QueryLatestHeight()
 	require.NoError(t, err)
 	var (
 		client *clientypes.QueryClientStateResponse
 	)
 	if err = retry.Do(func() error {
-		client, err = src.QueryClientState(srch)
+		client, err = src.QueryClientStateResponse(srch)
 		if err != nil {
 			srch, _ = src.QueryLatestHeight()
 		}

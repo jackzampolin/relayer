@@ -88,6 +88,16 @@ func createClientCmd() *cobra.Command {
 $ %s transact raw client ibc-0 ibc-1 ibczeroclient
 $ %s tx raw clnt ibc-1 ibc-0 ibconeclient`, appName, appName)),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			allowUpdateAfterExpiry, err := cmd.Flags().GetBool(flagUpdateAfterExpiry)
+			if err != nil {
+				return err
+			}
+
+			allowUpdateAfterMisbehaviour, err := cmd.Flags().GetBool(flagUpdateAfterMisbehaviour)
+			if err != nil {
+				return err
+			}
+
 			src, dst := args[0], args[1]
 			chains, err := config.Chains.Gets(src, dst)
 			if err != nil {
@@ -117,16 +127,19 @@ $ %s tx raw clnt ibc-1 ibc-0 ibconeclient`, appName, appName)),
 				dstHeader.GetHeight().(clienttypes.Height),
 				commitmenttypes.GetSDKSpecs(),
 				relayer.DefaultUpgradePath,
-				relayer.AllowUpdateAfterExpiry,
-				relayer.AllowUpdateAfterMisbehaviour,
+				allowUpdateAfterExpiry,
+				allowUpdateAfterMisbehaviour,
 			)
 
-			return sendAndPrint([]sdk.Msg{chains[src].CreateClient(
-				clientState, dstHeader)},
-				chains[src], cmd)
+			createMsg, err := chains[src].CreateClient(clientState, dstHeader)
+			if err != nil {
+				return err
+			}
+
+			return sendAndPrint([]sdk.Msg{createMsg}, chains[src], cmd)
 		},
 	}
-	return cmd
+	return clientParameterFlags(cmd)
 }
 
 func connInit() *cobra.Command {
@@ -546,7 +559,11 @@ $ %s tx raw chan-close-confirm ibc-0 ibc-1 ibczeroclient ibcchan1 ibcchan2 trans
 				return err
 			}
 
-			dstChanState, err := chains[dst].QueryChannel(int64(chains[dst].MustGetLatestLightHeight()) - 1)
+			dsth, err := chains[dst].QueryLatestHeight()
+			if err != nil {
+				return err
+			}
+			dstChanState, err := chains[dst].QueryChannel(dsth - 1)
 			if err != nil {
 				return err
 			}

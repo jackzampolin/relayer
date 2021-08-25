@@ -26,10 +26,10 @@ import (
 func (c *Chain) CreateClient(
 	//nolint:interfacer
 	clientState *tmclient.ClientState,
-	dstHeader *tmclient.Header) sdk.Msg {
+	dstHeader *tmclient.Header) (sdk.Msg, error) {
 
 	if err := dstHeader.ValidateBasic(); err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	msg, err := clienttypes.NewMsgCreateClient(
@@ -39,12 +39,12 @@ func (c *Chain) CreateClient(
 	)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	if err = msg.ValidateBasic(); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return msg
+	return msg, nil
 }
 
 // UpdateClient creates an sdk.Msg to update the client on src with data pulled from dst
@@ -99,9 +99,13 @@ func (c *Chain) ConnTry(
 		return nil, err
 	}
 
+	cph, err := counterparty.QueryLatestHeight()
+	if err != nil {
+		return nil, err
+	}
 	// NOTE: the proof height uses - 1 due to tendermint's delayed execution model
 	clientState, clientStateProof, consensusStateProof, connStateProof,
-		proofHeight, err := counterparty.GenerateConnHandshakeProof(counterparty.MustGetLatestLightHeight() - 1)
+		proofHeight, err := counterparty.GenerateConnHandshakeProof(uint64(cph) - 1)
 	if err != nil {
 		return nil, err
 	}
@@ -138,10 +142,14 @@ func (c *Chain) ConnAck(
 	if err != nil {
 		return nil, err
 	}
+	cph, err := counterparty.QueryLatestHeight()
+	if err != nil {
+		return nil, err
+	}
 
 	// NOTE: the proof height uses - 1 due to tendermint's delayed execution model
 	clientState, clientStateProof, consensusStateProof, connStateProof,
-		proofHeight, err := counterparty.GenerateConnHandshakeProof(counterparty.MustGetLatestLightHeight() - 1)
+		proofHeight, err := counterparty.GenerateConnHandshakeProof(uint64(cph) - 1)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +177,11 @@ func (c *Chain) ConnConfirm(counterparty *Chain) ([]sdk.Msg, error) {
 		return nil, err
 	}
 
-	counterpartyConnState, err := counterparty.QueryConnection(int64(counterparty.MustGetLatestLightHeight()) - 1)
+	cph, err := counterparty.QueryLatestHeight()
+	if err != nil {
+		return nil, err
+	}
+	counterpartyConnState, err := counterparty.QueryConnection(cph - 1)
 	if err != nil {
 		return nil, err
 	}
@@ -211,9 +223,13 @@ func (c *Chain) ChanTry(
 	if err != nil {
 		return nil, err
 	}
+	cph, err := counterparty.QueryLatestHeight()
+	if err != nil {
+		return nil, err
+	}
 
 	// NOTE: the proof height uses - 1 due to tendermint's delayed execution model
-	counterpartyChannelRes, err := counterparty.QueryChannel(int64(counterparty.MustGetLatestLightHeight()) - 1)
+	counterpartyChannelRes, err := counterparty.QueryChannel(cph - 1)
 	if err != nil {
 		return nil, err
 	}
@@ -245,8 +261,13 @@ func (c *Chain) ChanAck(
 		return nil, err
 	}
 
+	cph, err := counterparty.QueryLatestHeight()
+	if err != nil {
+		return nil, err
+	}
+
 	// NOTE: the proof height uses - 1 due to tendermint's delayed execution model
-	counterpartyChannelRes, err := counterparty.QueryChannel(int64(counterparty.MustGetLatestLightHeight()) - 1)
+	counterpartyChannelRes, err := counterparty.QueryChannel(cph - 1)
 	if err != nil {
 		return nil, err
 	}
@@ -270,9 +291,13 @@ func (c *Chain) ChanConfirm(counterparty *Chain) ([]sdk.Msg, error) {
 	if err != nil {
 		return nil, err
 	}
+	cph, err := counterparty.QueryLatestHeight()
+	if err != nil {
+		return nil, err
+	}
 
 	// NOTE: the proof height uses - 1 due to tendermint's delayed execution model
-	counterpartyChanState, err := counterparty.QueryChannel(int64(counterparty.MustGetLatestLightHeight()) - 1)
+	counterpartyChanState, err := counterparty.QueryChannel(cph - 1)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +336,6 @@ func (c *Chain) ChanCloseConfirm(dstChanState *chantypes.QueryChannelResponse) s
 // MsgTransfer creates a new transfer message
 func (c *Chain) MsgTransfer(dst *PathEnd, amount sdk.Coin, dstAddr string,
 	timeoutHeight, timeoutTimestamp uint64) sdk.Msg {
-
 	version := clienttypes.ParseChainID(dst.ChainID)
 	return transfertypes.NewMsgTransfer(
 		c.PathEnd.PortID,
@@ -328,9 +352,13 @@ func (c *Chain) MsgTransfer(dst *PathEnd, amount sdk.Coin, dstAddr string,
 // The counterparty represents the sending chain where the packet commitment would be stored.
 func (c *Chain) MsgRelayRecvPacket(counterparty *Chain, packet *relayMsgRecvPacket) (msgs []sdk.Msg, err error) {
 	var comRes *chantypes.QueryPacketCommitmentResponse
+	cph, err := counterparty.QueryLatestHeight()
+	if err != nil {
+		return nil, err
+	}
 	if err = retry.Do(func() (err error) {
 		// NOTE: the proof height uses - 1 due to tendermint's delayed execution model
-		comRes, err = counterparty.QueryPacketCommitment(int64(counterparty.MustGetLatestLightHeight())-1, packet.seq)
+		comRes, err = counterparty.QueryPacketCommitment(cph-1, packet.seq)
 		if err != nil {
 			return err
 		}
@@ -354,7 +382,7 @@ func (c *Chain) MsgRelayRecvPacket(counterparty *Chain, packet *relayMsgRecvPack
 
 		if counterparty.debug {
 			counterparty.Log(fmt.Sprintf("- [%s]@{%d} - try(%d/%d) query packet commitment: %s",
-				counterparty.ChainID, counterparty.MustGetLatestLightHeight()-1, n+1, rtyAttNum, err))
+				counterparty.ChainID, cph-1, n+1, rtyAttNum, err))
 		}
 
 	})); err != nil {
@@ -366,7 +394,6 @@ func (c *Chain) MsgRelayRecvPacket(counterparty *Chain, packet *relayMsgRecvPack
 		return nil, fmt.Errorf("receive packet [%s]seq{%d} has no associated proofs", c.ChainID, packet.seq)
 	}
 
-	version := clienttypes.ParseChainID(c.ChainID)
 	msg := chantypes.NewMsgRecvPacket(
 		chantypes.NewPacket(
 			packet.packetData,
@@ -375,7 +402,7 @@ func (c *Chain) MsgRelayRecvPacket(counterparty *Chain, packet *relayMsgRecvPack
 			counterparty.PathEnd.ChannelID,
 			c.PathEnd.PortID,
 			c.PathEnd.ChannelID,
-			clienttypes.NewHeight(version, packet.timeout),
+			packet.timeout,
 			packet.timeoutStamp,
 		),
 		comRes.Proof,
@@ -390,9 +417,13 @@ func (c *Chain) MsgRelayRecvPacket(counterparty *Chain, packet *relayMsgRecvPack
 // The counterparty represents the receiving chain where the acknowledgement would be stored.
 func (c *Chain) MsgRelayAcknowledgement(counterparty *Chain, packet *relayMsgPacketAck) (msgs []sdk.Msg, err error) {
 	var ackRes *chantypes.QueryPacketAcknowledgementResponse
+	cph, err := counterparty.QueryLatestHeight()
+	if err != nil {
+		return nil, err
+	}
 	if err = retry.Do(func() (err error) {
 		// NOTE: the proof height uses - 1 due to tendermint's delayed execution model
-		ackRes, err = counterparty.QueryPacketAcknowledgement(int64(counterparty.MustGetLatestLightHeight())-1, packet.seq)
+		ackRes, err = counterparty.QueryPacketAcknowledgement(cph-1, packet.seq)
 		if err != nil {
 			return err
 		}
@@ -416,7 +447,7 @@ func (c *Chain) MsgRelayAcknowledgement(counterparty *Chain, packet *relayMsgPac
 
 		if counterparty.debug {
 			counterparty.Log(fmt.Sprintf("- [%s]@{%d} - try(%d/%d) query packet acknowledgement: %s",
-				counterparty.ChainID, counterparty.MustGetLatestLightHeight()-1, n+1, rtyAttNum, err))
+				counterparty.ChainID, cph-1, n+1, rtyAttNum, err))
 		}
 
 	})); err != nil {
@@ -428,7 +459,6 @@ func (c *Chain) MsgRelayAcknowledgement(counterparty *Chain, packet *relayMsgPac
 		return nil, fmt.Errorf("ack packet [%s]seq{%d} has no associated proofs", counterparty.ChainID, packet.seq)
 	}
 
-	version := clienttypes.ParseChainID(counterparty.ChainID)
 	msg := chantypes.NewMsgAcknowledgement(
 		chantypes.NewPacket(
 			packet.packetData,
@@ -437,7 +467,7 @@ func (c *Chain) MsgRelayAcknowledgement(counterparty *Chain, packet *relayMsgPac
 			c.PathEnd.ChannelID,
 			counterparty.PathEnd.PortID,
 			counterparty.PathEnd.ChannelID,
-			clienttypes.NewHeight(version, packet.timeout),
+			packet.timeout,
 			packet.timeoutStamp,
 		),
 		packet.ack,
@@ -454,10 +484,14 @@ func (c *Chain) MsgRelayAcknowledgement(counterparty *Chain, packet *relayMsgPac
 // stored.
 func (c *Chain) MsgRelayTimeout(counterparty *Chain, packet *relayMsgTimeout) (msgs []sdk.Msg, err error) {
 	var recvRes *chantypes.QueryPacketReceiptResponse
+	cph, err := counterparty.QueryLatestHeight()
+	if err != nil {
+		return nil, err
+	}
 	if err = retry.Do(func() (err error) {
 		// NOTE: Timeouts currently only work with ORDERED channels for nwo
 		// NOTE: the proof height uses - 1 due to tendermint's delayed execution model
-		recvRes, err = counterparty.QueryPacketReceipt(int64(counterparty.MustGetLatestLightHeight())-1, packet.seq)
+		recvRes, err = counterparty.QueryPacketReceipt(cph-1, packet.seq)
 		if err != nil {
 			return err
 		}
@@ -481,7 +515,7 @@ func (c *Chain) MsgRelayTimeout(counterparty *Chain, packet *relayMsgTimeout) (m
 
 		if counterparty.debug {
 			counterparty.Log(fmt.Sprintf("- [%s]@{%d} - try(%d/%d) query packet receipt: %s",
-				counterparty.ChainID, counterparty.MustGetLatestLightHeight()-1, n+1, rtyAttNum, err))
+				counterparty.ChainID, cph-1, n+1, rtyAttNum, err))
 		}
 
 	})); err != nil {
@@ -493,7 +527,6 @@ func (c *Chain) MsgRelayTimeout(counterparty *Chain, packet *relayMsgTimeout) (m
 		return nil, fmt.Errorf("timeout packet [%s]seq{%d} has no associated proofs", c.ChainID, packet.seq)
 	}
 
-	version := clienttypes.ParseChainID(counterparty.ChainID)
 	msg := chantypes.NewMsgTimeout(
 		chantypes.NewPacket(
 			packet.packetData,
@@ -502,7 +535,7 @@ func (c *Chain) MsgRelayTimeout(counterparty *Chain, packet *relayMsgTimeout) (m
 			c.PathEnd.ChannelID,
 			counterparty.PathEnd.PortID,
 			counterparty.PathEnd.ChannelID,
-			clienttypes.NewHeight(version, packet.timeout),
+			packet.timeout,
 			packet.timeoutStamp,
 		),
 		packet.seq,
